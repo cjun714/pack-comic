@@ -142,7 +142,8 @@ func packArc(src, target string) error {
 	previousName := ""
 
 	for ; e == nil; e = ar.Entry() {
-		name := ar.Name()
+		name := filepath.Base(ar.Name())
+
 		// TODO unarr lib ignore dir entry in archive file
 		if !isImage(name) {
 			continue
@@ -410,7 +411,7 @@ func isExcluded(name, previousName string, currentTime, previousTime time.Time) 
 	}
 	// if 2 file modetime duration is greater than 20 days
 	if math.Abs(float64(currentTime.Unix()-previousTime.Unix())) > 20*3600*24 {
-		fmt.Println("duration > 20 days", name)
+		fmt.Println("duration > 20 days:", name)
 		return true
 	}
 
