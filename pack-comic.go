@@ -18,7 +18,7 @@ import (
 	"github.com/nwaples/rardecode"
 )
 
-var list = []string{
+var excludeList = []string{
 	"zzz-nahga-empire.jpg",
 	"page.jpg",
 	"page (newcomic.org).jpg",
@@ -374,14 +374,30 @@ func isComic(name string) bool {
 }
 
 func isExcluded(name, previousName string, currentTime, previousTime time.Time) bool {
+	name = strings.ToLower(name)
+	ext := filepath.Ext(name)
+	fname := strings.TrimSuffix(name, ext)
+
+	if strings.Index(name, "zz") == 0 ||
+		strings.Index(name, "z_") == 0 ||
+		strings.Index(name, "xxxx") == 0 ||
+		strings.HasSuffix(fname, "tag") {
+		return true
+	}
+
+	// check if name in excluded list
+	for _, str := range excludeList {
+		str = strings.ToLower(str)
+		if strings.Contains(name, str) {
+			return true
+		}
+	}
+
 	if excludeOff {
 		return false
 	}
 
-	ext := filepath.Ext(name)
-	fName := strings.TrimSuffix(name, ext)
-	bs := []byte(fName)
-
+	bs := []byte(fname)
 	i := 0
 	for _, char := range bs {
 		if char >= '0' && char <= '9' {
@@ -390,20 +406,6 @@ func isExcluded(name, previousName string, currentTime, previousTime time.Time) 
 	}
 	if i < 2 { // if number char counts less than 2, it should be excludeded
 		return true
-	}
-
-	name = strings.ToLower(name)
-	if strings.Index(name, "zz") == 0 ||
-		strings.Index(name, "z_") == 0 {
-		return true
-	}
-
-	// check if name in excluded list
-	for _, str := range list {
-		str = strings.ToLower(str)
-		if strings.Contains(name, str) {
-			return true
-		}
 	}
 
 	if previousTime.Unix() < 0 {
