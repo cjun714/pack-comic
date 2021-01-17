@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gen2brain/go-unarr"
 	"github.com/nwaples/rardecode"
 )
 
@@ -52,7 +53,7 @@ func main() {
 	start := time.Now()
 
 	if fileExist(src) { // if src is file
-		if e := repack(src, targetDir); e != nil {
+		if e := pack(src, targetDir); e != nil {
 			panic(e)
 		}
 		duration := time.Since(start)
@@ -96,7 +97,7 @@ func main() {
 
 		rel, _ := filepath.Rel(src, filepath.Dir(fPath))
 		newDir := filepath.Join(targetDir, rel)
-		if e := repack(fPath, newDir); e != nil {
+		if e := pack(fPath, newDir); e != nil {
 			fmt.Printf("convert failed, file: %s, error: %s\n", fPath, e)
 		}
 
@@ -109,6 +110,87 @@ func main() {
 	if e != nil {
 		panic(e)
 	}
+}
+
+func pack(src, targetDir string) error {
+	fmt.Println("convert:", src)
+
+	baseName := filepath.Base(src)
+	ext := filepath.Ext(baseName)
+	newName := strings.TrimSuffix(baseName, ext) + ".cbt"
+	target := filepath.Join(targetDir, newName)
+
+	return packArc(src, target)
+}
+
+func packArc(src, target string) error {
+	ar, e := unarr.NewArchive(src)
+	if e != nil {
+		return e
+	}
+	defer ar.Close()
+
+	f, e := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+	if e != nil {
+		return e
+	}
+
+	wr := tar.NewWriter(f)
+	defer wr.Close()
+
+	var previouseTime time.Time
+	previousName := ""
+
+	for ; e == nil; e = ar.Entry() {
+		name := ar.Name()
+		// TODO unarr lib ignore dir entry in archive file
+		if !isImage(name) {
+			continue
+		}
+
+		// TODO unrar doesn't checksum
+		data, e := ar.ReadAll()
+		if e != nil {
+			fmt.Printf("read file %s failed in %s, error:%s\n", name, src, e)
+			continue
+		}
+
+		// backup excluded file
+		if isExcluded(name, previousName, ar.ModTime(), previouseTime) {
+			ext := filepath.Ext(target)
+			target := strings.TrimSuffix(target, ext)
+			backup := target + "_" + name
+			e := ioutil.WriteFile(backup, data, 0666)
+			if e != nil {
+				fmt.Printf("backup excluded file failed:%s, error:%s\n", name, e)
+			}
+			continue
+		}
+
+		previousName = name
+		previouseTime = ar.ModTime()
+
+		h := &tar.Header{
+			Name:    name,
+			Mode:    int64(0666),
+			Size:    int64(len(data)),
+			ModTime: ar.ModTime(),
+		}
+		if e := wr.WriteHeader(h); e != nil {
+			return fmt.Errorf("write .cbt header failed, file:%s, name:%s, error:%w\n",
+				src, name, e)
+		}
+		if _, e := wr.Write(data); e != nil {
+			return fmt.Errorf("write .cbt content failed, file:%s, name:%s, error:%w\n",
+				src, name, e)
+		}
+	}
+
+	if e != nil && e != io.EOF {
+		return e
+	}
+
+	return nil
 }
 
 func repack(src, targetDir string) error {
@@ -159,9 +241,6 @@ func repackCBR(src, target string) error {
 		}
 
 		byts, e := ioutil.ReadAll(rd)
-		if e != nil {
-			return e
-		}
 		if e != nil {
 			return fmt.Errorf("extract .cbr failed, file:%s, name:%s, error:%w",
 				src, header.Name, e)
@@ -275,7 +354,15 @@ func repackCBZ(src, target string) error {
 func isImage(name string) bool {
 	ext := filepath.Ext(name)
 	ext = strings.ToLower(ext)
-	return ext == ".jpeg" || ext == ".jpg" || ext == ".png" || ext == ".webp"
+	if ext == ".jpeg" || ext == ".jpg" || ext == ".png" || ext == ".webp" {
+		return true
+	}
+	if ext == ".bmp" || ext == ".gif" || ext == ".tga" {
+		fmt.Println(name)
+		return true
+	}
+
+	return false
 }
 
 func isComic(name string) bool {
