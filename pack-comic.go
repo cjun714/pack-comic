@@ -2,8 +2,6 @@ package main
 
 import (
 	"archive/tar"
-	"archive/zip"
-	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -15,7 +13,6 @@ import (
 	"time"
 
 	"github.com/gen2brain/go-unarr"
-	"github.com/nwaples/rardecode"
 )
 
 var excludeList = []string{
@@ -189,164 +186,6 @@ func packArc(src, target string) error {
 
 	if e != nil && e != io.EOF {
 		return e
-	}
-
-	return nil
-}
-
-func repack(src, targetDir string) error {
-	fmt.Println("convert:", src)
-
-	baseName := filepath.Base(src)
-	ext := filepath.Ext(baseName)
-	newName := strings.TrimSuffix(baseName, ext) + ".cbt"
-	target := filepath.Join(targetDir, newName)
-
-	ext = strings.ToLower(ext)
-	if ext == ".cbz" || ext == ".zip" {
-		return repackCBZ(src, target)
-	}
-	if ext == ".cbr" || ext == ".rar" {
-		return repackCBR(src, target)
-	}
-
-	return nil
-}
-
-func repackCBR(src, target string) error {
-	bs, e := ioutil.ReadFile(src)
-	if e != nil {
-		return e
-	}
-	rd, e := rardecode.NewReader(bytes.NewReader(bs), "")
-	if e != nil {
-		return e
-	}
-
-	f, e := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
-	if e != nil {
-		return e
-	}
-
-	wr := tar.NewWriter(f)
-	defer wr.Close()
-
-	var header *rardecode.FileHeader
-	header, e = rd.Next()
-
-	var previouseTime time.Time
-	previousName := ""
-	for ; e == nil; header, e = rd.Next() {
-		if header.IsDir || !isImage(header.Name) {
-			continue
-		}
-
-		byts, e := ioutil.ReadAll(rd)
-		if e != nil {
-			return fmt.Errorf("extract .cbr failed, file:%s, name:%s, error:%w",
-				src, header.Name, e)
-		}
-
-		name := filepath.Base(header.Name)
-
-		// backup excluded file
-		if isExcluded(name, previousName, header.ModificationTime, previouseTime) {
-			ext := filepath.Ext(target)
-			target := strings.TrimSuffix(target, ext)
-			backup := target + "_" + name
-			e := ioutil.WriteFile(backup, byts, 0666)
-			if e != nil {
-				fmt.Printf("backup excluded file failed:%s, error:%s\n", name, e)
-			}
-			continue
-		}
-
-		previousName = name
-		previouseTime = header.ModificationTime
-
-		h := &tar.Header{
-			Name:    name,
-			Mode:    int64(header.Mode()),
-			Size:    int64(len(byts)),
-			ModTime: header.ModificationTime,
-		}
-		if e := wr.WriteHeader(h); e != nil {
-			return fmt.Errorf("write .cbt header failed, file:%s, name:%s, error:%w\n",
-				src, name, e)
-		}
-		if _, e := wr.Write(byts); e != nil {
-			return fmt.Errorf("write .cbt content failed, file:%s, name:%s, error:%w\n",
-				src, name, e)
-		}
-	}
-
-	if e != nil && e != io.EOF {
-		return fmt.Errorf("convert .cbr failed, file:%s, error:%w", src, e)
-	}
-
-	return nil
-}
-
-func repackCBZ(src, target string) error {
-	rd, e := zip.OpenReader(src)
-	if e != nil {
-		return e
-	}
-
-	f, e := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
-	if e != nil {
-		return e
-	}
-	wr := tar.NewWriter(f)
-	defer wr.Close()
-
-	var previousTime time.Time
-	previousName := ""
-	for _, file := range rd.File {
-		if file.FileInfo().IsDir() || !isImage(file.Name) {
-			continue
-		}
-
-		r, e := file.Open()
-		if e != nil {
-			return e
-		}
-		byts, e := ioutil.ReadAll(r)
-		r.Close()
-		if e != nil {
-			return fmt.Errorf("extract .cbz failed, file:%s, name:%s, error:%w",
-				src, file.Name, e)
-		}
-
-		name := filepath.Base(file.Name)
-
-		if isExcluded(name, previousName, file.Modified, previousTime) {
-			ext := filepath.Ext(target)
-			target := strings.TrimSuffix(target, ext)
-			backup := target + "_" + name
-			e := ioutil.WriteFile(backup, byts, 0666)
-			if e != nil {
-				fmt.Printf("backup excluded file failed:%s, error:%s\n", name, e)
-			}
-			continue
-		}
-		previousName = name
-		previousTime = file.Modified
-
-		h := &tar.Header{
-			Name:    name,
-			Mode:    int64(file.Mode()),
-			Size:    int64(len(byts)),
-			ModTime: file.Modified,
-		}
-		if e := wr.WriteHeader(h); e != nil {
-			return fmt.Errorf("write .cbt header failed, file:%s, name:%s, error:%w",
-				src, name, e)
-		}
-		if _, e := wr.Write(byts); e != nil {
-			return fmt.Errorf("write .cbt content failed, file:%s, name:%s, error:%w",
-				src, name, e)
-		}
 	}
 
 	return nil
