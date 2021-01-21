@@ -138,7 +138,11 @@ func packArc(src, target string) error {
 	var previouseTime time.Time
 	previousName := ""
 
-	for ; e == nil; e = ar.Entry() {
+	for e == nil {
+		if e = ar.Entry(); e != nil {
+			break
+		}
+
 		name := filepath.Base(ar.Name())
 
 		// TODO unarr lib ignore dir entry in archive file
