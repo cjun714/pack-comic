@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cjun714/glog/log"
 	"github.com/gen2brain/go-unarr"
 )
 
@@ -54,7 +55,7 @@ func main() {
 			panic(e)
 		}
 		duration := time.Since(start)
-		fmt.Println("cost: ", duration)
+		log.I("cost:", duration)
 
 		return
 	}
@@ -66,7 +67,7 @@ func main() {
 	}
 
 	if !dirExist(src) {
-		panic("target path is invalid: " + src)
+		panic("invalid target path:" + src)
 	}
 
 	// if src is dir, walk through
@@ -95,14 +96,14 @@ func main() {
 		rel, _ := filepath.Rel(src, filepath.Dir(fPath))
 		newDir := filepath.Join(targetDir, rel)
 		if e := pack(fPath, newDir); e != nil {
-			fmt.Printf("convert failed, file: %s, error: %s\n", fPath, e)
+			log.E("convert failed:", fPath, " error:", e)
 		}
 
 		return nil
 	})
 
 	duration := time.Since(start)
-	fmt.Println("cost: ", duration)
+	log.I("cost:", duration)
 
 	if e != nil {
 		panic(e)
@@ -110,7 +111,7 @@ func main() {
 }
 
 func pack(src, targetDir string) error {
-	fmt.Println("convert:", src)
+	log.I("convert:", src)
 
 	baseName := filepath.Base(src)
 	ext := filepath.Ext(baseName)
@@ -153,7 +154,7 @@ func packArc(src, target string) error {
 		// TODO unrar doesn't checksum
 		data, e := ar.ReadAll()
 		if e != nil {
-			fmt.Printf("read file %s failed in %s, error:%s\n", name, src, e)
+			log.E("read file failed:", name, "in", src, "error:", e)
 			continue
 		}
 
@@ -164,7 +165,7 @@ func packArc(src, target string) error {
 			backup := target + "_" + name
 			e := ioutil.WriteFile(backup, data, 0666)
 			if e != nil {
-				fmt.Printf("backup excluded file failed:%s, error:%s\n", name, e)
+				log.E("backup excluded file failed:", name, "error:", e)
 			}
 			continue
 		}
@@ -202,7 +203,7 @@ func isImage(name string) bool {
 		return true
 	}
 	if ext == ".bmp" || ext == ".gif" || ext == ".tga" {
-		fmt.Println(name)
+		log.I(name)
 		return true
 	}
 
@@ -256,7 +257,7 @@ func isExcluded(name, previousName string, currentTime, previousTime time.Time) 
 	}
 	// if 2 file modetime duration is greater than 20 days
 	if math.Abs(float64(currentTime.Unix()-previousTime.Unix())) > 20*3600*24 {
-		fmt.Println("duration > 20 days:", name)
+		log.I("duration > 20 days:", name)
 		return true
 	}
 
