@@ -96,7 +96,7 @@ func main() {
 		rel, _ := filepath.Rel(src, filepath.Dir(fPath))
 		newDir := filepath.Join(targetDir, rel)
 		if e := pack(fPath, newDir); e != nil {
-			log.E("convert failed:", fPath, " error:", e)
+			log.E("convert failed:", fPath, "error:", e)
 		}
 
 		return nil
